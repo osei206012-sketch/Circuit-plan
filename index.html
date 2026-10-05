@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Circuit Plan — wiring diagram designer</title>
+<style>
+  :root {
+    --blue: #0F3254;
+    --blue-soft: #133A5D;
+    --blue-deep: #081E38;
+    --blue-black: #061729;
+    --grid-line: rgba(255,255,255,0.08);
+    --grid-major: rgba(255,255,255,0.15);
+    --chalk: #EAF1FA;
+    --chalk-dim: rgba(234, 241, 250, 0.60);
+    --chalk-faint: rgba(234, 241, 250, 0.38);
+    --amber: #E8A33D;
+    --amber-soft: rgba(232, 163, 61, 0.16);
+    --ink: #0B2A4A;
+    --radius: 16px;
+    --radius-sm: 10px;
+    --shadow: 0 8px 24px rgba(2, 10, 20, 0.45);
+    --shadow-sm: 0 2px 10px rgba(2, 10, 20, 0.35);
+    --display: "Spline Sans", "Archivo Narrow", "Arial Narrow", sans-serif;
+    --mono: "Spline Sans Mono", "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+    --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--blue-black);
+    color: var(--chalk);
+    font-family: var(--ui);
+    display: flex;
+    flex-direction: column;
+    overscroll-behavior-y: none;
+  }
+  button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
+  button:active { transform: scale(0.96); }
+  button, .tool, .chip, .tab { transition: transform 0.12s ease, background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
+
+  /* App bar */
+  .appbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px;
+    background: linear-gradient(180deg, var(--blue-deep), var(--blue-black));
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    position: sticky; top: 0; z-index: 20;
+    box-shadow: var(--shadow-sm);
+  }
+  .appbar-icon {
+    width: 36px; height: 36px; border-radius: 10px; flex: none;
+    background: linear-gradient(145deg, var(--amber), #C9822B);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 6px rgba(232,163,61,0.35);
+  }
+  .appbar-icon svg { width: 20px; height: 20px; }
+  .appbar-title { font-family: var(--display); font-weight: 700; font-size: 1.12rem; line-height: 1.1; letter-spacing: 0.01em; }
+  .appbar-sub { font-size: 0.74rem; color: var(--chalk-dim); margin-top: 1px; }
+
+  main { flex: 1; min-height: 0; max-width: 640px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; }
+  .screen { padding: 16px 16px calc(env(safe-area-inset-bottom, 0px) + 92px); animation: fadein 0.22s ease; }
+  .screen[hidden] { display: none; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  h1 { font-family: var(--display); font-weight: 700; font-size: 1.3rem; margin: 2px 0 4px; }
+  h2 { font-family: var(--display); font-size: 1.05rem; font-weight: 700; margin: 0 0 4px; }
+  .lede { color: var(--chalk-dim); margin: 0 0 14px; font-size: 0.86rem; max-width: 60ch; line-height: 1.45; }
+
+  .card {
+    background: var(--blue);
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 14px;
+  }
+  .disclaimer {
+    border-left: 3px solid var(--amber);
+    background: var(--amber-soft);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    padding: 11px 13px;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--chalk-dim);
+    margin-bottom: 14px;
+  }
+  .disclaimer strong { color: var(--chalk); }
+
+  /* Generator */
+  .generator .sub { color: var(--chalk-dim); font-size: 0.8rem; margin: 2px 0 10px; }
+  textarea#promptBox {
+    width: 100%; font: inherit; font-size: 0.92rem; color: var(--chalk);
+    background: var(--blue-deep); border: 1px solid rgba(255,255,255,0.14); border-radius: var(--radius-sm);
+    padding: 12px; resize: vertical; min-height: 76px; line-height: 1.4;
+  }
+  textarea#promptBox:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0 2px; }
+  .chip {
+    font-size: 0.74rem; color: var(--chalk-dim); background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.14); border-radius: 20px; padding: 6px 12px; cursor: pointer;
+  }
+  .chip:hover { color: var(--chalk); border-color: var(--chalk-dim); }
+  .genRow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+  button.primary {
+    font-size: 0.9rem; font-weight: 700; color: var(--blue-black); background: var(--amber);
+    border: none; border-radius: var(--radius-sm); padding: 12px 20px; cursor: pointer;
+    box-shadow: 0 3px 10px rgba(232,163,61,0.3);
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  button.primary:disabled { opacity: 0.75; cursor: default; box-shadow: none; }
+  .spinner {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid rgba(8,30,56,0.3); border-top-color: var(--blue-black);
+    animation: spin 0.7s linear infinite; display: none;
+  }
+  .spinner.show { display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #genStatus { font-size: 0.78rem; color: var(--chalk-dim); line-height: 1.4; }
+  #genStatus.err { color: #F0998A; }
+
+  /* Toolbox */
+  .toolbox {
+    display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tool {
+    flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 5px;
+    width: 62px; padding: 10px 4px 8px;
+    background: var(--blue-soft); border: none; border-radius: var(--radius-sm);
+    color: var(--chalk-dim); cursor: pointer; font-size: 0.62rem; box-shadow: var(--shadow-sm);
+  }
+  .tool svg { width: 24px; height: 24px; }
+  .tool[aria-pressed="true"] { background: var(--amber-soft); color: var(--chalk); box-shadow: inset 0 0 0 2px var(--amber); }
+  .tool.wire-tool { width: auto; flex-direction: row; padding: 10px 14px; font-size: 0.82rem; gap: 7px; color: var(--chalk); }
+  .tool.wire-tool[aria-pressed="true"] { box-shadow: inset 0 0 0 2px #6FB4E8; background: rgba(111,180,232,0.14); }
+
+  .row2 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; font-size: 0.85rem; }
+  .circuit-picker { display: flex; align-items: center; gap: 6px; background: var(--blue-soft); border-radius: var(--radius-sm); padding: 6px 10px; box-shadow: var(--shadow-sm); }
+  .circuit-picker label { color: var(--chalk-dim); font-size: 0.76rem; }
+  select#circuitSelect {
+    font: inherit; font-size: 0.82rem; color: var(--ink); background: var(--chalk);
+    border: none; border-radius: 7px; padding: 5px 8px;
+  }
+  .swatch { width: 13px; height: 13px; border-radius: 4px; display: inline-block; vertical-align: -2px; }
+  button.action {
+    font-size: 0.78rem; color: var(--chalk); background: var(--blue-soft);
+    border: none; border-radius: var(--radius-sm); padding: 9px 12px; cursor: pointer; box-shadow: var(--shadow-sm);
+  }
+
+  /* Canvas */
+  .stage-wrap {
+    border-radius: var(--radius);
+    overflow: auto; touch-action: none; box-shadow: var(--shadow);
+    background:
+      linear-gradient(var(--grid-major) 1px, transparent 1px) 0 0 / 100px 100px,
+      linear-gradient(90deg, var(--grid-major) 1px, transparent 1px) 0 0 / 100px 100px,
+      linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0 / 20px 20px,
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) 0 0 / 20px 20px,
+      var(--blue-deep);
+    max-height: 62vh;
+  }
+  canvas { display: block; touch-action: none; }
+  .hint { font-size: 0.76rem; color: var(--chalk-dim); margin: 10px 2px 0; line-height: 1.5; }
+
+  /* Legend */
+  .legend {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px;
+  }
+  .legend div { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: var(--chalk-dim); }
+  .legend svg { width: 22px; height: 22px; flex: none; }
+
+  /* Circuit table */
+  table { border-collapse: collapse; width: 100%; font-size: 0.8rem; }
+  th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid rgba(255,255,255,0.08); white-space: nowrap; }
+  th { color: var(--chalk-dim); font-weight: 600; font-size: 0.7rem; }
+  td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
+  select.inline {
+    font: inherit; font-size: 0.78rem; color: var(--ink); background: var(--chalk);
+    border: none; border-radius: 7px; padding: 5px 7px;
+  }
+  .note { color: var(--chalk-dim); font-size: 0.76rem; margin: 10px 0 0; line-height: 1.5; }
+  footer.card { color: var(--chalk-dim); font-size: 0.78rem; line-height: 1.5; }
+
+  /* Tab bar */
+  .tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    display: flex; justify-content: space-around;
+    background: linear-gradient(0deg, var(--blue-black) 60%, rgba(6,23,41,0.92));
+    border-top: 1px solid rgba(255,255,255,0.08);
+    padding: 8px 8px calc(env(safe-area-inset-bottom, 0px) + 8px);
+    backdrop-filter: blur(10px);
+    max-width: 640px; margin: 0 auto; width: 100%;
+  }
+  .tab {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    background: none; border: none; color: var(--chalk-faint); padding: 6px 4px 4px; cursor: pointer;
+    font-size: 0.68rem; border-radius: var(--radius-sm); position: relative;
+  }
+  .tab svg { width: 22px; height: 22px; }
+  .tab[aria-current="true"] { color: var(--amber); }
+  .tab[aria-current="true"]::before {
+    content: ""; position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
+    width: 22px; height: 3px; border-radius: 2px; background: var(--amber);
+  }
+
+  @media (max-width: 380px) { .tool { width: 54px; } }
+</style>
+</head>
+<body>
+  <header class="appbar">
+    <div class="appbar-icon">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" fill="#081E38"/></svg>
+    </div>
+    <div>
+      <div class="appbar-title">Circuit Plan</div>
+      <div class="appbar-sub" id="appbarSub">Place devices, draw wires</div>
+    </div>
+  </header>
+
+  <main>
+    <section class="screen" id="screen-build">
+      <h1>Build your plan</h1>
+      <p class="disclaimer"><strong>Planning tool, not a substitute for a licensed electrician.</strong> Layouts and suggested gauges/breaker sizes are general U.S. residential rules of thumb. Have the finished plan and any real work reviewed and permitted by a licensed electrician before anything is energized.</p>
+
+      <div class="toolbox" id="toolbox" role="toolbar" aria-label="Device palette"></div>
+
+      <div class="row2">
+        <button class="tool wire-tool" id="wireToolBtn" aria-pressed="false">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M3 12h18" stroke="#6FB4E8" stroke-width="2.5" fill="none"/></svg>
+          Draw wire
+        </button>
+        <div class="circuit-picker">
+          <label for="circuitSelect">Active circuit</label>
+          <select id="circuitSelect"></select>
+        </div>
+      </div>
+      <div class="row2">
+        <button class="action" id="deleteBtn">Delete selected</button>
+        <button class="action" id="clearBtn">Clear plan</button>
+        <button class="action" id="pngBtn">Export PNG</button>
+      </div>
+
+      <div class="stage-wrap">
+        <canvas id="stage"></canvas>
+      </div>
+      <p class="hint">Tap a device, then tap the grid to place it. Tap "Draw wire," then tap two devices to connect them. Tap a symbol or wire to select it; drag a symbol to reposition; double-tap to rename. The canvas scrolls if the plan is bigger than your screen.</p>
+    </section>
+
+    <section class="screen" id="screen-circuits" hidden>
+      <h1>Circuits &amp; legend</h1>
+      <div class="card">
+        <h2>Symbol legend</h2>
+        <div class="legend" id="legend" style="margin-top:10px;"></div>
+      </div>
+      <div class="card">
+        <h2>Circuit list</h2>
+        <div style="overflow-x:auto">
+          <table id="circuitTable">
+            <thead><tr><th>Circuit</th><th>Type</th><th>Devices</th><th>Breaker</th><th>Wire</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="note">"Devices" counts items wired to that circuit — not total electrical load. A licensed electrician should confirm actual VA load, run length and code before sizing anything for real.</p>
+      </div>
+      <footer class="card">
+        Wire colors on this diagram distinguish circuits from each other for planning — they don't represent real insulation colors. On actual house wiring, black or red is typically hot, white is neutral, and bare copper or green is ground; always verify against your local code.
+      </footer>
+    </section>
+  </main>
+
+  <nav class="tabbar" id="tabbar">
+    <button class="tab" data-screen="build" aria-current="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.6"/></svg>
+      <span>Build</span>
+    </button>
+    <button class="tab" data-screen="circuits" aria-current="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="18" height="4" rx="1"/></svg>
+      <span>Circuits</span>
+    </button>
+  </nav>
+
+<script>
+(() => {
+  const DEVICE_TYPES = {
+    outlet:  { label: "Outlet",  draw: drawOutlet },
+    gfci:    { label: "GFCI outlet", draw: drawGFCI },
+    switch:  { label: "Switch",  draw: drawSwitch },
+    light:   { label: "Ceiling light", draw: drawLight },
+    sconce:  { label: "Wall light", draw: drawSconce },
+    panel:   { label: "Panel", draw: drawPanel },
+    smoke:   { label: "Smoke/CO detector", draw: drawSmoke },
+    appliance: { label: "240V appliance", draw: drawAppliance },
+    junction: { label: "Junction box", draw: drawJunction }
+  };
+  const TYPE_PREFIX = { outlet:"O", gfci:"G", switch:"S", light:"L", sconce:"W", panel:"P", smoke:"D", appliance:"A", junction:"J" };
+
+  const CIRCUIT_PALETTE = ["#E8A33D","#6FB4E8","#8FD19E","#D98FD1","#F0998A","#C9C96F","#B48CE0","#6FE0C9"];
+  const CIRCUIT_TYPES = {
+    lighting:  { label: "Lighting",            breaker: "15A", wire: "14 AWG" },
+    general:   { label: "General receptacles", breaker: "20A", wire: "12 AWG" },
+    kitchen:   { label: "Kitchen / small appliance", breaker: "20A", wire: "12 AWG" },
+    bath:      { label: "Bathroom (GFCI)",      breaker: "20A", wire: "12 AWG" },
+    dryer:     { label: "Dryer (240V)",         breaker: "30A", wire: "10 AWG" },
+    range:     { label: "Range (240V)",         breaker: "50A", wire: "6 AWG" },
+    hvac:      { label: "HVAC / AC",            breaker: "per nameplate", wire: "per nameplate" },
+    ev:        { label: "EV charger (240V)",    breaker: "40–50A", wire: "8–6 AWG" }
+  };
+
+  let circuits = CIRCUIT_PALETTE.map((c, i) => ({ id: i+1, color: c, type: i===0?"lighting":"general" }));
+  let devices = []; // {id,type,x,y,label,circuit}
+  let wires = [];   // {id,a,b,circuit}
+  let rooms = [];   // {name,x,y,w,h}
+  let nextId = 1, counts = {};
+  let activeTool = null, wireMode = false, wireFirst = null;
+  let selected = null;
+  let drag = null;
+  let activeCircuit = 1;
+  let canvasW = 760, canvasH = 520;
+
+  const canvas = document.getElementById("stage");
+  const ctx = canvas.getContext("2d");
+
+  function resize() {
+    canvas.width = canvasW * devicePixelRatio;
+    canvas.height = canvasH * devicePixelRatio;
+    canvas.style.width = canvasW + "px";
+    canvas.style.height = canvasH + "px";
+    ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+  }
+
+  // ---- symbol drawing ----
+  function drawOutlet(g) {
+    g.strokeStyle = "#0B2A4A"; g.fillStyle = "#EAF1FA"; g.lineWidth = 2;
+    g.beginPath(); g.arc(0,0,15,0,Math.PI*2); g.fill(); g.stroke();
+    g.beginPath(); g.moveTo(-6,-6); g.lineTo(-6,6); g.moveTo(6,-6); g.lineTo(6,6); g.stroke();
+    g.beginPath(); g.moveTo(-9,0); g.lineTo(9,0); g.stroke();
+  }
+  function drawGFCI(g) {
+    drawOutlet(g);
+    g.font = "bold 7px sans-serif"; g.fillStyle = "#0B2A4A"; g.textAlign="center";
+    g.fillText("G", 0, -18);
+  }
+  function drawSwitch(g) {
+    g.strokeStyle = "#0B2A4A"; g.fillStyle = "#EAF1FA"; g.lineWidth = 2;
+    g.beginPath(); g.arc(0,0,14,0,Math.PI*2); g.fill(); g.stroke();
+    g.font = "bold 13px sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillStyle = "#0B2A4A"; g.fillText("S", 0, 1);
+  }
+  function drawLight(g) {
+    g.strokeStyle = "#0B2A4A"; g.fillStyle = "#EAF1FA"; g.lineWidth = 2;
+    g.beginPath(); g.arc(0,0,15,0,Math.PI*2); g.fill(); g.stroke();
+    g.beginPath();
+    g.moveTo(-10.5,-10.5); g.lineTo(10.5,10.5);
+    g.moveTo(10.5,-10.5); g.lineTo(-10.5,10.5);
+    g.stroke();
+  }
+  function drawSconce(g) {
+    g.strokeStyle = "#0B2A4A"; g.fillStyle = "#EAF1FA"; g.lineWidth = 2;
+    g.beginPath(); g.moveTo(0,-15); g.lineTo(13,10); g.lineTo(-13,10); g.closePath(); g.fill(); g.stroke();
+  }
+  function drawPanel(g) {
+    g.strokeStyle = "#0B2A4A"; g.fillStyle = "#EAF1FA"; g.lineWidth = 2.2;
+    g.fillRect(-16,-18,32,36); g.strokeRect(-16,-18,32,36);
+    g.strokeStyle = "#0B2A4A"; g.lineWidth = 1.4;
+    for (let i=-10;i<=10;i+=6) { g.beginPath(); g.moveTo(-10,i); g.lineTo(10,i); g.stroke(); }
+  }
+  function drawSmoke(g) {
+    g.strokeStyle = "#0B2A4A"; g.fillStyle = "#EAF1FA"; g.lineWidth = 2;
+    g.beginPath(); g.arc(0,0,14,0,Math.PI*2); g.fill(); g.stroke();
+    g.beginPath(); g.arc(0,0,7,0,Math.PI*2); g.stroke();
+  }
+  function drawAppliance(g) {
+    g.strokeStyle = "#0B2A4A"; g.fillStyle = "#EAF1FA"; g.lineWidth = 2;
+    g.beginPath(); g.arc(0,0,16,0,Math.PI*2); g.fill(); g.stroke();
+    g.beginPath();
+    g.moveTo(-7,-9); g.lineTo(-7,9);
+    g.moveTo(7,-9); g.lineTo(7,9);
+    g.stroke();
+    g.font = "bold 7px sans-serif"; g.textAlign="center"; g.fillStyle="#0B2A4A";
+    g.fillText("240V", 0, 1);
+  }
+  function drawJunction(g) {
+    g.strokeStyle = "#0B2A4A"; g.fillStyle = "#EAF1FA"; g.lineWidth = 2;
+    g.fillRect(-11,-11,22,22); g.strokeRect(-11,-11,22,22);
+  }
+
+  function symbolSVG(key) {
+    switch(key) {
+      case "outlet": return '<circle cx="0" cy="0" r="15" fill="#EAF1FA" stroke="#0B2A4A" stroke-width="2"/><line x1="-6" y1="-6" x2="-6" y2="6" stroke="#0B2A4A" stroke-width="2"/><line x1="6" y1="-6" x2="6" y2="6" stroke="#0B2A4A" stroke-width="2"/><line x1="-9" y1="0" x2="9" y2="0" stroke="#0B2A4A" stroke-width="2"/>';
+      case "gfci": return '<circle cx="0" cy="0" r="15" fill="#EAF1FA" stroke="#0B2A4A" stroke-width="2"/><line x1="-6" y1="-6" x2="-6" y2="6" stroke="#0B2A4A" stroke-width="2"/><line x1="6" y1="-6" x2="6" y2="6" stroke="#0B2A4A" stroke-width="2"/><line x1="-9" y1="0" x2="9" y2="0" stroke="#0B2A4A" stroke-width="2"/><text x="0" y="-18" font-size="7" font-weight="bold" text-anchor="middle" fill="#0B2A4A">G</text>';
+      case "switch": return '<circle cx="0" cy="0" r="14" fill="#EAF1FA" stroke="#0B2A4A" stroke-width="2"/><text x="0" y="4" font-size="13" font-weight="bold" text-anchor="middle" fill="#0B2A4A">S</text>';
+      case "light": return '<circle cx="0" cy="0" r="15" fill="#EAF1FA" stroke="#0B2A4A" stroke-width="2"/><line x1="-10.5" y1="-10.5" x2="10.5" y2="10.5" stroke="#0B2A4A" stroke-width="2"/><line x1="10.5" y1="-10.5" x2="-10.5" y2="10.5" stroke="#0B2A4A" stroke-width="2"/>';
+      case "sconce": return '<polygon points="0,-15 13,10 -13,10" fill="#EAF1FA" stroke="#0B2A4A" stroke-width="2"/>';
+      case "panel": return '<rect x="-16" y="-18" width="32" height="36" fill="#EAF1FA" stroke="#0B2A4A" stroke-width="2.2"/><line x1="-10" y1="-10" x2="10" y2="-10" stroke="#0B2A4A" stroke-width="1.4"/><line x1="-10" y1="-4" x2="10" y2="-4" stroke="#0B2A4A" stroke-width="1.4"/><line x1="-10" y1="2" x2="10" y2="2" stroke="#0B2A4A" stroke-width="1.4"/><line x1="-10" y1="8" x2="10" y2="8" stroke="#0B2A4A" stroke-width="1.4"/>';
+      case "smoke": return '<circle cx="0" cy="0" r="14" fill="#EAF1FA" stroke="#0B2A4A" stroke-width="2"/><circle cx="0" cy="0" r="7" fill="none" stroke="#0B2A4A" stroke-width="1.4"/>';
+      case "appliance": return '<circle cx="0" cy="0" r="16" fill="#EAF1FA" stroke="#0B2A4A" stroke-width="2"/><line x1="-7" y1="-9" x2="-7" y2="9" stroke="#0B2A4A" stroke-width="2"/><line x1="7" y1="-9" x2="7" y2="9" stroke="#0B2A4A" stroke-width="2"/><text x="0" y="1" font-size="7" font-weight="bold" text-anchor="middle" fill="#0B2A4A">240</text>';
+      case "junction": return '<rect x="-11" y="-11" width="22" height="22" fill="#EAF1FA" stroke="#0B2A4A" stroke-width="2"/>';
+    }
+    return "";
+  }
+
+  function buildToolbox() {
+    const tb = document.getElementById("toolbox");
+    Object.entries(DEVICE_TYPES).forEach(([key, def]) => {
+      const btn = document.createElement("button");
+      btn.className = "tool"; btn.type = "button"; btn.setAttribute("aria-pressed","false");
+      btn.dataset.type = key;
+      const svgWrap = document.createElementNS("http://www.w3.org/2000/svg","svg");
+      svgWrap.setAttribute("viewBox","-18 -18 36 36");
+      svgWrap.innerHTML = symbolSVG(key);
+      btn.appendChild(svgWrap);
+      const lab = document.createElement("span"); lab.textContent = def.label; btn.appendChild(lab);
+      btn.addEventListener("click", () => selectTool(key));
+      tb.appendChild(btn);
+    });
+  }
+
+  function buildLegend() {
+    const el = document.getElementById("legend");
+    Object.entries(DEVICE_TYPES).forEach(([key, def]) => {
+      const row = document.createElement("div");
+      const svgWrap = document.createElementNS("http://www.w3.org/2000/svg","svg");
+      svgWrap.setAttribute("viewBox","-18 -18 36 36");
+      svgWrap.innerHTML = symbolSVG(key);
+      const span = document.createElement("span"); span.textContent = def.label;
+      row.appendChild(svgWrap); row.appendChild(span);
+      el.appendChild(row);
+    });
+  }
+
+  function buildCircuitSelect() {
+    const sel = document.getElementById("circuitSelect");
+    sel.innerHTML = "";
+    circuits.forEach(c => {
+      const opt = document.createElement("option");
+      opt.value = c.id; opt.textContent = "Circuit " + c.id;
+      sel.appendChild(opt);
+    });
+    if (!circuits.find(c=>c.id===activeCircuit)) activeCircuit = circuits[0].id;
+    sel.value = activeCircuit;
+  }
+  document.getElementById("circuitSelect").addEventListener("change", e => { activeCircuit = parseInt(e.target.value,10); });
+
+  function selectTool(key) {
+    activeTool = activeTool === key ? null : key;
+    wireMode = false; wireFirst = null;
+    document.querySelectorAll(".tool").forEach(b => b.setAttribute("aria-pressed", b.dataset.type === activeTool ? "true" : "false"));
+    document.getElementById("wireToolBtn").setAttribute("aria-pressed","false");
+  }
+  document.getElementById("wireToolBtn").addEventListener("click", () => {
+    wireMode = !wireMode; wireFirst = null; activeTool = null;
+    document.querySelectorAll(".tool").forEach(b => b.setAttribute("aria-pressed","false"));
+    document.getElementById("wireToolBtn").setAttribute("aria-pressed", wireMode ? "true":"false");
+  });
+
+  const GRID = 20;
+  function snap(v) { return Math.round(v / GRID) * GRID; }
+  function deviceAt(x,y) {
+    for (let i = devices.length-1; i>=0; i--) {
+      const d = devices[i];
+      if (Math.hypot(d.x-x, d.y-y) <= 18) return d;
+    }
+    return null;
+  }
+  function wireAt(x,y) {
+    for (const w of wires) {
+      const a = devices.find(d=>d.id===w.a), b = devices.find(d=>d.id===w.b);
+      if (!a||!b) continue;
+      if (pointToSegDist(x,y,a.x,a.y,b.x,b.y) < 8) return w;
+    }
+    return null;
+  }
+  function pointToSegDist(px,py,x1,y1,x2,y2) {
+    const dx=x2-x1, dy=y2-y1;
+    const len2 = dx*dx+dy*dy || 1;
+    let t = ((px-x1)*dx + (py-y1)*dy)/len2;
+    t = Math.max(0,Math.min(1,t));
+    const cx = x1+t*dx, cy = y1+t*dy;
+    return Math.hypot(px-cx,py-cy);
+  }
+  function getPos(evt) {
+    const r = canvas.getBoundingClientRect();
+    const touch = evt.touches && evt.touches.length ? evt.touches[0] : evt;
+    return { x: touch.clientX - r.left, y: touch.clientY - r.top };
+  }
+
+  let lastTap = 0;
+  function handleStart(e) {
+    if (e.touches) e.preventDefault();
+    const {x,y} = getPos(e);
+
+    if (activeTool) {
+      const prefix = TYPE_PREFIX[activeTool];
+      counts[activeTool] = (counts[activeTool]||0)+1;
+      devices.push({ id: nextId++, type: activeTool, x: snap(x), y: snap(y), label: prefix+counts[activeTool], circuit: activeCircuit });
+      selected = null;
+      render(); updateCircuitTable();
+      return;
+    }
+    if (wireMode) {
+      const d = deviceAt(x,y);
+      if (!d) return;
+      if (!wireFirst) { wireFirst = d; render(); return; }
+      if (wireFirst.id !== d.id) {
+        wires.push({ id: nextId++, a: wireFirst.id, b: d.id, circuit: activeCircuit });
+        updateCircuitTable();
+      }
+      wireFirst = null; render();
+      return;
+    }
+    const d = deviceAt(x,y);
+    const now = Date.now();
+    if (d) {
+      if (now - lastTap < 350 && selected && selected.kind==="device" && selected.id===d.id) {
+        const nn = prompt("Rename device", d.label);
+        if (nn) d.label = nn.slice(0,16);
+      }
+      lastTap = now;
+      selected = { kind:"device", id: d.id };
+      drag = { id: d.id, dx: x-d.x, dy: y-d.y };
+      render();
+      return;
+    }
+    const w = wireAt(x,y);
+    if (w) { selected = { kind:"wire", id: w.id }; render(); return; }
+    selected = null; render();
+  }
+  function handleMove(e) {
+    if (!drag) return;
+    if (e.touches) e.preventDefault();
+    const {x,y} = getPos(e);
+    const d = devices.find(dv=>dv.id===drag.id);
+    if (d) { d.x = snap(x-drag.dx); d.y = snap(y-drag.dy); render(); }
+  }
+  function handleEnd() { drag = null; }
+
+  canvas.addEventListener("touchstart", handleStart, { passive: false });
+  canvas.addEventListener("touchmove", handleMove, { passive: false });
+  canvas.addEventListener("touchend", handleEnd, { passive: false });
+  canvas.addEventListener("touchcancel", handleEnd, { passive: false });
+  canvas.addEventListener("mousedown", handleStart);
+  window.addEventListener("mousemove", handleMove);
+  window.addEventListener("mouseup", handleEnd);
+
+  document.getElementById("deleteBtn").addEventListener("click", () => {
+    if (!selected) return;
+    if (selected.kind === "device") {
+      devices = devices.filter(d=>d.id!==selected.id);
+      wires = wires.filter(w=>w.a!==selected.id && w.b!==selected.id);
+    } else {
+      wires = wires.filter(w=>w.id!==selected.id);
+    }
+    selected = null; render(); updateCircuitTable();
+  });
+  document.getElementById("clearBtn").addEventListener("click", () => {
+    if (!confirm("Clear the whole plan?")) return;
+    devices = []; wires = []; rooms = []; counts = {}; selected = null; wireFirst = null;
+    canvasW = 760; canvasH = 520; resize();
+    render(); updateCircuitTable();
+  });
+  document.getElementById("pngBtn").addEventListener("click", () => {
+    const link = document.createElement("a");
+    link.download = "wiring-plan.png";
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  });
+
+  function circuitColor(id) {
+    const c = circuits.find(c=>c.id===id);
+    return c ? c.color : "#EAF1FA";
+  }
+
+  function render() {
+    ctx.clearRect(0,0,canvasW,canvasH);
+
+    rooms.forEach(r => {
+      ctx.strokeStyle = "rgba(234,241,250,0.55)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+      ctx.fillStyle = "rgba(234,241,250,0.04)";
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.fillStyle = "rgba(234,241,250,0.78)";
+      ctx.font = "bold 12px sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(r.name, r.x+8, r.y+16);
+    });
+
+    wires.forEach(wr => {
+      const a = devices.find(d=>d.id===wr.a), b = devices.find(d=>d.id===wr.b);
+      if (!a||!b) return;
+      ctx.strokeStyle = circuitColor(wr.circuit);
+      ctx.lineWidth = selected && selected.kind==="wire" && selected.id===wr.id ? 4.5 : 3;
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    });
+    if (wireFirst) {
+      ctx.fillStyle = "#6FB4E8"; ctx.globalAlpha=0.25;
+      ctx.beginPath(); ctx.arc(wireFirst.x, wireFirst.y, 20, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha=1;
+    }
+
+    devices.forEach(d => {
+      ctx.save();
+      ctx.translate(d.x, d.y);
+      if (selected && selected.kind==="device" && selected.id===d.id) {
+        ctx.beginPath(); ctx.arc(0,0,22,0,Math.PI*2);
+        ctx.strokeStyle = "#E8A33D"; ctx.lineWidth = 2; ctx.setLineDash([3,3]); ctx.stroke(); ctx.setLineDash([]);
+      }
+      DEVICE_TYPES[d.type].draw(ctx);
+      ctx.restore();
+      ctx.fillStyle = "#EAF1FA";
+      ctx.font = "bold 10px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(d.label, d.x, d.y+30);
+      ctx.beginPath(); ctx.arc(d.x+14, d.y-14, 4, 0, Math.PI*2);
+      ctx.fillStyle = circuitColor(d.circuit); ctx.fill();
+    });
+
+    scheduleSave();
+  }
+
+  function updateCircuitTable() {
+    const tbody = document.querySelector("#circuitTable tbody");
+    tbody.innerHTML = "";
+    circuits.forEach(c => {
+      const n = devices.filter(d=>d.circuit===c.id).length;
+      const def = CIRCUIT_TYPES[c.type] || CIRCUIT_TYPES.general;
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        '<td><span class="swatch" style="background:'+c.color+'"></span> Circuit '+c.id+'</td>' +
+        '<td></td>' +
+        '<td class="num">'+n+'</td>' +
+        '<td class="num">'+def.breaker+'</td>' +
+        '<td class="num">'+def.wire+'</td>';
+      const typeSel = document.createElement("select");
+      typeSel.className = "inline";
+      Object.entries(CIRCUIT_TYPES).forEach(([key,d]) => {
+        const o = document.createElement("option");
+        o.value = key; o.textContent = d.label;
+        if (key === c.type) o.selected = true;
+        typeSel.appendChild(o);
+      });
+      typeSel.addEventListener("change", () => { c.type = typeSel.value; updateCircuitTable(); });
+      tr.children[1].appendChild(typeSel);
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ---------- tab navigation ----------
+  const screens = { build: document.getElementById("screen-build"), circuits: document.getElementById("screen-circuits") };
+  const appbarSub = document.getElementById("appbarSub");
+  const SUBTITLES = { build: "Place devices, draw wires", circuits: "Legend & circuit list" };
+  function showScreen(name) {
+    Object.entries(screens).forEach(([key, el]) => { el.hidden = key !== name; });
+    document.querySelectorAll(".tab").forEach(t => t.setAttribute("aria-current", t.dataset.screen === name ? "true" : "false"));
+    appbarSub.textContent = SUBTITLES[name] || "";
+    if (name === "build") { resize(); render(); }
+  }
+  document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => showScreen(t.dataset.screen)));
+
+  // ---------- persistence (local to this device) ----------
+  const STORAGE_KEY = "circuit-plan-v1";
+  let saveTimer;
+  function scheduleSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({devices,wires,rooms,circuits,counts,nextId,canvasW,canvasH}));
+      } catch (e) { /* storage unavailable, plan just won't persist */ }
+    }, 400);
+  }
+  function restoreSaved() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      devices = saved.devices || []; wires = saved.wires || []; rooms = saved.rooms || [];
+      circuits = saved.circuits || circuits; counts = saved.counts || {};
+      nextId = saved.nextId || nextId;
+      canvasW = saved.canvasW || canvasW; canvasH = saved.canvasH || canvasH;
+    } catch (e) { /* no saved plan yet, or it was corrupted */ }
+  }
+
+  buildToolbox();
+  buildLegend();
+  restoreSaved();
+  buildCircuitSelect();
+  resize();
+  updateCircuitTable();
+  render();
+  showScreen("build");
+})();
+</script>
+</body>
+</html>

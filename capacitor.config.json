@@ -1,0 +1,12 @@
+{
+  "appId": "com.yourname.circuitplan",
+  "appName": "Circuit Plan",
+  "webDir": "www",
+  "backgroundColor": "#081E38",
+  "ios": {
+    "contentInset": "always"
+  },
+  "android": {
+    "backgroundColor": "#081E38"
+  }
+}

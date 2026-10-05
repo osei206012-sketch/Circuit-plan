@@ -1,0 +1,20 @@
+{
+  "name": "circuit-plan",
+  "version": "1.0.0",
+  "description": "Circuit Plan — a pictorial electrical wiring planner.",
+  "private": true,
+  "scripts": {
+    "sync": "cap sync",
+    "open:ios": "cap open ios",
+    "open:android": "cap open android"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.1.0",
+    "@capacitor/ios": "^6.1.0",
+    "@capacitor/android": "^6.1.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.0",
+    "@capacitor/assets": "^3.0.5"
+  }
+}
